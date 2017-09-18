@@ -22,48 +22,33 @@
 
 package org.restcomm.slee.resource.statistics;
 
-
-import javax.management.ObjectName;
 import javax.slee.Address;
-import javax.slee.InvalidArgumentException;
-import javax.slee.facilities.EventLookupFacility;
 import javax.slee.facilities.Tracer;
-import javax.slee.management.UnrecognizedResourceAdaptorEntityException;
-import javax.slee.resource.ActivityHandle;
-import javax.slee.resource.ConfigProperties;
-import javax.slee.resource.FailureReason;
-import javax.slee.resource.FireableEventType;
-import javax.slee.resource.Marshaler;
-import javax.slee.resource.ReceivableService;
-import javax.slee.resource.ResourceAdaptor;
-import javax.slee.resource.ResourceAdaptorContext;
-import javax.slee.resource.SleeEndpoint;
+import javax.slee.resource.*;
 
 import org.mobicents.slee.container.SleeContainer;
 import org.mobicents.slee.container.management.ResourceManagement;
-
 import org.restcomm.commons.statistics.reporter.RestcommStatsReporter;
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.MetricRegistry;
-
-import java.lang.management.ManagementFactory;
-import java.lang.reflect.Method;
-import java.util.TimerTask;
-import java.util.concurrent.TimeUnit;
 
 /**
  *
  */
-public class StatisticsResourceAdaptor implements ResourceAdaptor {
+public class StatisticsResourceAdaptor implements ResourceAdaptor
+{
 	private transient Tracer tracer;
 
 	private ResourceAdaptorContext raContext;
 	private SleeContainer sleeContainer;
 	private ResourceManagement resourceManagement;
 
-	public StatisticsResourceAdaptor() { }
+	private Long statisticsTimerIntervalInSeconds;
 
-	public ResourceAdaptorContext getResourceAdaptorContext() {
+	public StatisticsResourceAdaptor()
+	{
+	}
+
+	public ResourceAdaptorContext getResourceAdaptorContext()
+	{
 		return raContext;
 	}
 
@@ -72,131 +57,52 @@ public class StatisticsResourceAdaptor implements ResourceAdaptor {
 	protected static final String DEFAULT_STATISTICS_SERVER = "https://statistics.restcomm.com/rest/";
 
 	private RestcommStatsReporter statsReporter = new RestcommStatsReporter();
-	private MetricRegistry metrics = RestcommStatsReporter.getMetricRegistry();
-	// define metric name
-	private Counter counterCalls = metrics.counter("calls");
-	private Counter counterSeconds = metrics.counter("seconds");
-	private Counter counterMessages = metrics.counter("messages");
-
+	private CountersFacility countersFacility = new CountersFacility();
 	// lifecycle methods
 
-	public void setResourceAdaptorContext(ResourceAdaptorContext raContext) {
+	public void setResourceAdaptorContext(ResourceAdaptorContext raContext)
+	{
 		this.raContext = raContext;
 		this.tracer = raContext.getTracer(StatisticsResourceAdaptor.class.getSimpleName());
 
 		this.sleeContainer = SleeContainer.lookupFromJndi();
-		if (this.sleeContainer != null) {
+		if (this.sleeContainer != null)
+		{
 			this.resourceManagement = sleeContainer.getResourceManagement();
 		}
 	}
 
-	private class StatisticsTimerTask extends TimerTask {
-
-		@Override
-		public void run() {
-
-			if (resourceManagement == null) {
-				return;
-			}
-
-			for (String raEntity: resourceManagement.getResourceAdaptorEntities()) {
-				if (tracer.isFineEnabled()) {
-					tracer.fine("RA Entity: " + raEntity);
-				}
-
-				try {
-					ObjectName usageMBeanName = resourceManagement.getResourceUsageMBean(raEntity);
-
-					// null for default set
-					String usageParameterSetName = null; // "statisitcs";
-					Object usageParameterSet = ManagementFactory.getPlatformMBeanServer()
-							.invoke(usageMBeanName, "getInstalledUsageParameterSet",
-									new Object[] {usageParameterSetName},
-									new String[] {String.class.getName()});
-
-					if (usageParameterSet != null) {
-						try {
-							Method method = usageParameterSet.getClass()
-									.getMethod("getParameter", String.class, boolean.class);
-
-							// get and reset
-							Long calls = (Long) method.invoke(usageParameterSet, "calls", true);
-							if(calls != null && calls > 0) {
-								if (tracer.isFineEnabled()) {
-									tracer.fine("calls: " + calls);
-								}
-								counterCalls.inc(calls);
-							}
-
-							Long messages = (Long) method.invoke(usageParameterSet, "messages", true);
-							if(messages !=null && messages > 0) {
-								if (tracer.isFineEnabled()) {
-									tracer.fine("messages: " + messages);
-								}
-								counterMessages.inc(messages);
-							}
-
-							Long seconds = (Long) method.invoke(usageParameterSet, "seconds", true);
-							if(seconds !=null && seconds > 0) {
-								if (tracer.isFineEnabled()) {
-									tracer.fine("seconds: " + seconds);
-								}
-								counterSeconds.inc(seconds);
-							}
-						} catch (Exception e) {
-							if (tracer.isWarningEnabled()) {
-								tracer.warning("Cant get Usage parameter value", e);
-							}
-						}
-					}
-
-					//ManagementFactory.getPlatformMBeanServer()
-					//		.invoke(usageMBeanName, "resetAllUsageParameters",
-					//				null, null);
-
-				} catch (UnrecognizedResourceAdaptorEntityException e) {
-					// TODO
-				} catch (InvalidArgumentException e) {
-					// TODO
-				} catch (Exception e) {
-					// TODO
-				}
-			} // end of for
-
-			// TODO: check counters?
-			//if (calls != 0 || messages != 0 || seconds != 0) {
-			if (statsReporter != null) {
-				statsReporter.report();
-			}
-			//}
-		}
+	public void raConfigure(ConfigProperties properties)
+	{
+		// read timer property statisticsTimerInterval
 	}
 
-	public void raConfigure(ConfigProperties properties) {
-	}
-
-	public void raActive() {
-		if (statsReporter == null) {
+	public void raActive()
+	{
+		if (statsReporter == null)
+		{
 			statsReporter = new RestcommStatsReporter();
 		}
 
 		String statisticsServer = Version.getVersionProperty(STATISTICS_SERVER);
-		if (statisticsServer == null || !statisticsServer.contains("http")) {
+		if (statisticsServer == null || !statisticsServer.contains("http"))
+		{
 			statisticsServer = DEFAULT_STATISTICS_SERVER;
 		}
 
-		if (tracer.isFineEnabled()) {
+		if (tracer.isFineEnabled())
+		{
 			tracer.fine("statisticsServer: " + statisticsServer);
 		}
 
-		//define remote server address (optionally)
+		// define remote server address (optionally)
 		statsReporter.setRemoteServer(statisticsServer);
 		String projectName = System.getProperty("RestcommProjectName", "jainslee");
 		String projectType = System.getProperty("RestcommProjectType", "community");
-		String projectVersion = System.getProperty("RestcommProjectVersion",
-				Version.getVersionProperty(Version.RELEASE_VERSION));
+		String projectVersion = System.getProperty("RestcommProjectVersion", Version.getVersionProperty(Version.RELEASE_VERSION));
 
-		if (tracer.isFineEnabled()) {
+		if (tracer.isFineEnabled())
+		{
 			tracer.fine("Restcomm Stats " + projectName + " " + projectType + " " + projectVersion);
 		}
 
@@ -206,22 +112,28 @@ public class StatisticsResourceAdaptor implements ResourceAdaptor {
 
 		Version.printVersion();
 
-		// TODO: define periodicity - now to once a minute (for testing)
-		//define periodicity - default to once a day
-		//statsReporter.start(86400, TimeUnit.SECONDS);
-		raContext.getTimer().schedule(new StatisticsTimerTask(), 0, 30 * 1000);
+		if (resourceManagement != null)
+		{
+			raContext.getTimer().schedule(new StatisticsTimerTask(resourceManagement, tracer, statsReporter, countersFacility), 0, statisticsTimerIntervalInSeconds * 1000);
+		}
 	}
 
-	public void raStopping() { }
+	public void raStopping()
+	{
+	}
 
-	public void raInactive() {
+	public void raInactive()
+	{
 		statsReporter.stop();
 		statsReporter = null;
 	}
 
-	public void raUnconfigure() { }
+	public void raUnconfigure()
+	{
+	}
 
-	public void unsetResourceAdaptorContext() {
+	public void unsetResourceAdaptorContext()
+	{
 		raContext = null;
 		tracer = null;
 
@@ -230,68 +142,76 @@ public class StatisticsResourceAdaptor implements ResourceAdaptor {
 	}
 
 	// config management methods
-	public void raVerifyConfiguration(ConfigProperties properties)
-			throws javax.slee.resource.InvalidConfigurationException {
+	public void raVerifyConfiguration(ConfigProperties properties) throws javax.slee.resource.InvalidConfigurationException
+	{
 	}
 
-	public void raConfigurationUpdate(ConfigProperties properties) {
+	public void raConfigurationUpdate(ConfigProperties properties)
+	{
 		throw new UnsupportedOperationException();
 	}
 
-
 	// event filtering methods
-	public void serviceActive(ReceivableService service) {
+	public void serviceActive(ReceivableService service)
+	{
 	}
 
-	public void serviceStopping(ReceivableService service) {
+	public void serviceStopping(ReceivableService service)
+	{
 	}
 
-	public void serviceInactive(ReceivableService service) {
+	public void serviceInactive(ReceivableService service)
+	{
 	}
-
 
 	// mandatory callbacks
-	public void administrativeRemove(ActivityHandle handle) {
+	public void administrativeRemove(ActivityHandle handle)
+	{
 	}
 
-	public Object getActivity(ActivityHandle activityHandle) {
+	public Object getActivity(ActivityHandle activityHandle)
+	{
 		return null;
 	}
 
-	public ActivityHandle getActivityHandle(Object activity) {
+	public ActivityHandle getActivityHandle(Object activity)
+	{
 		return null;
 	}
 
 	// optional call-backs
-	public void activityEnded(ActivityHandle handle) {
+	public void activityEnded(ActivityHandle handle)
+	{
 	}
 
-	public void activityUnreferenced(ActivityHandle activityHandle) {
+	public void activityUnreferenced(ActivityHandle activityHandle)
+	{
 	}
 
-	public void eventProcessingFailed(ActivityHandle arg0,
-			FireableEventType arg1, Object arg2, Address arg3,
-			ReceivableService arg4, int arg5, FailureReason arg6) {
+	public void eventProcessingFailed(ActivityHandle arg0, FireableEventType arg1, Object arg2, Address arg3, ReceivableService arg4, int arg5, FailureReason arg6)
+	{
 	}
 
-	public void eventProcessingSuccessful(ActivityHandle arg0,
-			FireableEventType arg1, Object arg2, Address arg3,
-			ReceivableService arg4, int arg5) {
+	public void eventProcessingSuccessful(ActivityHandle arg0, FireableEventType arg1, Object arg2, Address arg3, ReceivableService arg4, int arg5)
+	{
 	}
 
-	public void eventUnreferenced(ActivityHandle arg0, FireableEventType arg1,
-			Object event, Address arg3, ReceivableService arg4, int arg5) {
+	public void eventUnreferenced(ActivityHandle arg0, FireableEventType arg1, Object event, Address arg3, ReceivableService arg4, int arg5)
+	{
 	}
 
-	public void queryLiveness(ActivityHandle activityHandle) {
+	public void queryLiveness(ActivityHandle activityHandle)
+	{
 	}
 
 	// interface accessors
-	public Object getResourceAdaptorInterface(String arg0) {
+	public Object getResourceAdaptorInterface(String arg0)
+	{
 		return null;
 	}
 
-	public Marshaler getMarshaler() {
+	public Marshaler getMarshaler()
+	{
 		return null;
 	}
 
