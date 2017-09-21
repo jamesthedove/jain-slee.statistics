@@ -2,6 +2,7 @@
 <deploy-config>
   <ra-entity resource-adaptor-id="ResourceAdaptorID[name=StatisticsResourceAdaptor,vendor=org.restcomm,version=1.0]" entity-name="StatisticsRA">
     <properties>
+    	<property name="org.restcomm.slee.resource.statistics.TIMER_INTERVAL_IN_SECONDS" type="java.lang.Integer" value="30" />
     </properties>
     <ra-link name="StatisticsRA" />
   </ra-entity>

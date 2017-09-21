@@ -22,6 +22,8 @@
 
 package org.restcomm.slee.resource.statistics;
 
+import java.util.concurrent.TimeUnit;
+
 import javax.slee.Address;
 import javax.slee.facilities.Tracer;
 import javax.slee.resource.*;
@@ -30,18 +32,17 @@ import org.mobicents.slee.container.SleeContainer;
 import org.mobicents.slee.container.management.ResourceManagement;
 import org.restcomm.commons.statistics.reporter.RestcommStatsReporter;
 
-/**
- *
- */
 public class StatisticsResourceAdaptor implements ResourceAdaptor
 {
+	private static final String TIMER_INTERVAL_IN_SECONDS = "org.restcomm.slee.resource.statistics.TIMER_INTERVAL_IN_SECONDS";
+	
 	private transient Tracer tracer;
 
 	private ResourceAdaptorContext raContext;
 	private SleeContainer sleeContainer;
 	private ResourceManagement resourceManagement;
 
-	private Long statisticsTimerIntervalInSeconds;
+	private Integer timerInterval;
 
 	public StatisticsResourceAdaptor()
 	{
@@ -74,7 +75,11 @@ public class StatisticsResourceAdaptor implements ResourceAdaptor
 
 	public void raConfigure(ConfigProperties properties)
 	{
-		// read timer property statisticsTimerInterval
+		if (tracer.isFineEnabled()) {
+            tracer.fine("Configuring RA.");
+        }
+		
+		this.timerInterval = (Integer) properties.getProperty(TIMER_INTERVAL_IN_SECONDS).getValue();
 	}
 
 	public void raActive()
@@ -114,7 +119,7 @@ public class StatisticsResourceAdaptor implements ResourceAdaptor
 
 		if (resourceManagement != null)
 		{
-			raContext.getTimer().schedule(new StatisticsTimerTask(resourceManagement, tracer, statsReporter, countersFacility), 0, statisticsTimerIntervalInSeconds * 1000);
+			raContext.getTimer().schedule(new StatisticsTimerTask(resourceManagement, tracer, statsReporter, countersFacility), 0, TimeUnit.MILLISECONDS.convert(timerInterval, TimeUnit.SECONDS));
 		}
 	}
 
@@ -130,6 +135,7 @@ public class StatisticsResourceAdaptor implements ResourceAdaptor
 
 	public void raUnconfigure()
 	{
+		this.timerInterval = null;
 	}
 
 	public void unsetResourceAdaptorContext()

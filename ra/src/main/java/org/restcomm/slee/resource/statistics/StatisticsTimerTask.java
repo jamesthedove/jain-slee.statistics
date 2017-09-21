@@ -1,14 +1,16 @@
 package org.restcomm.slee.resource.statistics;
 
-import java.lang.management.ManagementFactory;
 import java.lang.reflect.Method;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.TimerTask;
 
 import javax.management.ObjectName;
+import javax.slee.InvalidArgumentException;
 import javax.slee.facilities.Tracer;
 
+import org.jboss.mx.util.MBeanServerLocator;
 import org.mobicents.slee.container.management.ResourceManagement;
 import org.restcomm.commons.statistics.reporter.RestcommStatsReporter;
 
@@ -30,6 +32,7 @@ public class StatisticsTimerTask extends TimerTask
 	@Override
 	public void run()
 	{
+		long totalUpdateCount = 0L;
 		for (String raEntity : resourceManagement.getResourceAdaptorEntities())
 		{
 			if (tracer.isFineEnabled())
@@ -37,47 +40,64 @@ public class StatisticsTimerTask extends TimerTask
 				tracer.fine("RA Entity: " + raEntity);
 			}
 
-			Object usageParameterSet = null;
 			try
 			{
-				ObjectName usageMBeanName = resourceManagement.getResourceUsageMBean(raEntity);
+				ObjectName usageMBeanName = null;
+				try
+				{
+					usageMBeanName = resourceManagement.getResourceUsageMBean(raEntity);
+				}
+				catch (InvalidArgumentException e)
+				{
+				}
 
-				// null for default set
-				String usageParameterSetName = null; // "statisitcs";
-				usageParameterSet = ManagementFactory.getPlatformMBeanServer().invoke(usageMBeanName, "getInstalledUsageParameterSet", new Object[]
-				{ usageParameterSetName }, new String[]
-				{ String.class.getName() });
+				if (usageMBeanName != null)
+				{
+					// null for default set
+					String usageParameterSetName = null; // "statisitcs";
+					Object usageParameterSet = MBeanServerLocator.locateJBoss().invoke(usageMBeanName, "getInstalledUsageParameterSet", new Object[]
+					{ usageParameterSetName }, new String[]
+					{ String.class.getName() });
 
+					long updateCount = updateCountersReturnCount(usageParameterSet);
+					
+					if (tracer.isFineEnabled())
+					{
+						tracer.fine("Total update count for " + usageParameterSet.getClass() + ":" + updateCount);
+					}
+					
+					if (updateCount > 0)
+					{
+						totalUpdateCount += updateCount;
+						resetCounters(usageParameterSet);
+						
+						if (tracer.isFineEnabled())
+						{
+							tracer.fine("Counters reset for " + usageParameterSet.getClass());
+						}
+					}
+				}
 			}
 			catch (Exception e)
 			{
-				if (tracer.isWarningEnabled())
-				{
-					tracer.warning("Can't get Usage parameter set", e);
-				}
+				// ignoring ra-s that don'e have statistics
 			}
+		}
 
-			if (usageParameterSet != null)
-				updateCounters(usageParameterSet);
-
-			// ManagementFactory.getPlatformMBeanServer()
-			// .invoke(usageMBeanName, "resetAllUsageParameters",
-			// null, null);
-
-		} // end of for
-
-		// TODO: check counters?
-		// if (calls != 0 || messages != 0 || seconds != 0) {
-		if (statsReporter != null)
+		if (totalUpdateCount > 0 && statsReporter != null)
 		{
-			tracer.info("Calling RestcommStatsReporter.report() ...");
 			statsReporter.report();
 		}
-		// }
+
+		if (tracer.isFineEnabled())
+		{
+			tracer.fine(getClass() + " finished. Total update count:" + totalUpdateCount);
+		}
 	}
 
-	public void updateCounters(Object usageParameterSet)
+	public Long updateCountersReturnCount(Object usageParameterSet)
 	{
+		long totalCount = 0L;
 		Set<String> paramNames = fetchParameterNames(usageParameterSet);
 		for (String paramName : paramNames)
 		{
@@ -88,34 +108,36 @@ public class StatisticsTimerTask extends TimerTask
 				{
 					tracer.fine(paramName + ":" + count);
 				}
-				tracer.info("Updating statistics for " + usageParameterSet.getClass().getSimpleName() + ",param:" + paramName + ",value:" + count);
+
 				countersFacility.updateCounter(paramName, count);
-			}
-			else
-			{
-				tracer.info("Zero statistics for " + usageParameterSet.getClass().getSimpleName() + ",param:" + paramName);
+				totalCount += count;
 			}
 		}
+
+		return totalCount;
 	}
 
 	@SuppressWarnings("unchecked")
 	private Set<String> fetchParameterNames(Object usageParameterSet)
 	{
-		Set<String> parameterNames = null;
+		Set<String> names = new HashSet<String>();
 		try
 		{
-			Method method = usageParameterSet.getClass().getMethod("getParameterNames");
-			parameterNames = (Set<String>) method.invoke(usageParameterSet);
+			Method method = usageParameterSet.getClass().getMethod("getAllParameters");
+			Collection<String> parameterNames = (Collection<String>) method.invoke(usageParameterSet);
+			if (parameterNames != null)
+			{
+				names.addAll(parameterNames);
+			}
 		}
 		catch (Exception e)
 		{
-			parameterNames = new HashSet<String>();
 			if (tracer.isWarningEnabled())
 			{
-				tracer.warning("Can't get Usage parameter names", e);
+				tracer.warning("Can't get Usage parameter names for " + usageParameterSet.getClass(), e);
 			}
 		}
-		return parameterNames;
+		return names;
 	}
 
 	private Long fetchParameterValue(Object usageParameterSet, String paramName)
@@ -123,25 +145,32 @@ public class StatisticsTimerTask extends TimerTask
 		Long paramValue = null;
 		try
 		{
-			Method method = usageParameterSet.getClass().getMethod("getParameter", String.class);
-
-			// get and reset
-			paramValue = (Long) method.invoke(usageParameterSet, paramName);
-			if (paramValue != null && paramValue > 0)
-			{
-				if (tracer.isFineEnabled())
-				{
-					tracer.fine(paramName + ": " + paramValue);
-				}
-			}
+			Method method = usageParameterSet.getClass().getMethod("getParameter", String.class, boolean.class);
+			paramValue = (Long) method.invoke(usageParameterSet, paramName, false);
 		}
 		catch (Exception e)
 		{
 			if (tracer.isWarningEnabled())
 			{
-				tracer.warning("Can't get Usage parameter value", e);
+				tracer.warning("Can't get Usage parameter value for " + usageParameterSet.getClass(), e);
 			}
 		}
 		return paramValue;
+	}
+
+	private void resetCounters(Object usageParameterSet)
+	{
+		try
+		{
+			Method resetMethod = usageParameterSet.getClass().getMethod("reset");
+			resetMethod.invoke(usageParameterSet);
+		}
+		catch (Exception e)
+		{
+			if (tracer.isWarningEnabled())
+			{
+				tracer.warning("Reset counters failed for " + usageParameterSet.getClass(), e);
+			}
+		}
 	}
 }
