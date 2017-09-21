@@ -1,5 +1,6 @@
 package org.restcomm.slee.resource.statistics;
 
+import java.lang.management.ManagementFactory;
 import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.HashSet;
@@ -10,7 +11,6 @@ import javax.management.ObjectName;
 import javax.slee.InvalidArgumentException;
 import javax.slee.facilities.Tracer;
 
-import org.jboss.mx.util.MBeanServerLocator;
 import org.mobicents.slee.container.management.ResourceManagement;
 import org.restcomm.commons.statistics.reporter.RestcommStatsReporter;
 
@@ -55,7 +55,7 @@ public class StatisticsTimerTask extends TimerTask
 				{
 					// null for default set
 					String usageParameterSetName = null; // "statisitcs";
-					Object usageParameterSet = MBeanServerLocator.locateJBoss().invoke(usageMBeanName, "getInstalledUsageParameterSet", new Object[]
+					Object usageParameterSet = ManagementFactory.getPlatformMBeanServer().invoke(usageMBeanName, "getInstalledUsageParameterSet", new Object[]
 					{ usageParameterSetName }, new String[]
 					{ String.class.getName() });
 

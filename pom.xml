@@ -22,9 +22,8 @@
 	</modules>
 
 	<properties>
-		<maven.du.plugin.jboss5.version>3.0.14</maven.du.plugin.jboss5.version>
-		<maven.du.plugin.wildfly.version>4.0.2</maven.du.plugin.wildfly.version>
-		<slee.code.version>2.9.144</slee.code.version>
+		<maven.du.plugin.version>4.0.2</maven.du.plugin.version>
+		<slee.code.version>7.1.0.36</slee.code.version>
 	</properties>
 
 	<dependencyManagement>
