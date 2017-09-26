@@ -35,7 +35,7 @@ import org.restcomm.commons.statistics.reporter.RestcommStatsReporter;
 public class StatisticsResourceAdaptor implements ResourceAdaptor
 {
 	private static final String TIMER_INTERVAL_IN_SECONDS = "org.restcomm.slee.resource.statistics.TIMER_INTERVAL_IN_SECONDS";
-	
+
 	private transient Tracer tracer;
 
 	private ResourceAdaptorContext raContext;
@@ -43,6 +43,7 @@ public class StatisticsResourceAdaptor implements ResourceAdaptor
 	private ResourceManagement resourceManagement;
 
 	private Integer timerInterval;
+	private StatisticsTimerTask timerTask;
 
 	public StatisticsResourceAdaptor()
 	{
@@ -75,10 +76,11 @@ public class StatisticsResourceAdaptor implements ResourceAdaptor
 
 	public void raConfigure(ConfigProperties properties)
 	{
-		if (tracer.isFineEnabled()) {
-            tracer.fine("Configuring RA.");
-        }
-		
+		if (tracer.isFineEnabled())
+		{
+			tracer.fine("Configuring RA.");
+		}
+
 		this.timerInterval = (Integer) properties.getProperty(TIMER_INTERVAL_IN_SECONDS).getValue();
 	}
 
@@ -119,7 +121,8 @@ public class StatisticsResourceAdaptor implements ResourceAdaptor
 
 		if (resourceManagement != null)
 		{
-			raContext.getTimer().schedule(new StatisticsTimerTask(resourceManagement, tracer, statsReporter, countersFacility), 0, TimeUnit.MILLISECONDS.convert(timerInterval, TimeUnit.SECONDS));
+			timerTask = new StatisticsTimerTask(resourceManagement, tracer, statsReporter, countersFacility);
+			raContext.getTimer().schedule(timerTask, 0, TimeUnit.MILLISECONDS.convert(timerInterval, TimeUnit.SECONDS));
 		}
 	}
 
@@ -136,6 +139,11 @@ public class StatisticsResourceAdaptor implements ResourceAdaptor
 	public void raUnconfigure()
 	{
 		this.timerInterval = null;
+		if (this.timerTask != null)
+		{
+			this.timerTask.cancel();
+			this.timerTask = null;
+		}
 	}
 
 	public void unsetResourceAdaptorContext()
