@@ -11,6 +11,7 @@
 
 	<artifactId>restcomm-slee-ra-statistics</artifactId>
 	<groupId>org.mobicents.resources</groupId>
+	<version>7.1.1-SNAPSHOT</version>
 
 	<name>Restcomm :: Resources :: ${project.artifactId}</name>
 
